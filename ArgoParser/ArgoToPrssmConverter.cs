@@ -1002,7 +1002,7 @@ namespace ArgoParser
                 {
                     var _l = (bends.LowerCoordinate - bends.UpperCoordinate) * 10;
                     var _h = ribTopY - bends.DeltaUpper * 10 - profMinY - bends.DeltaLower * 10;
-                    bendSegment.Length = _l;
+                    bendSegment.Length = Math.Sqrt(_l * _l + _h * _h);
                     bendSegment.Angle = -Math.Atan(_h / _l) * 180 / Math.PI;
                     bendSegment.Height = _h;
                     zOffset += _h;

@@ -28,6 +28,9 @@ namespace ArgoParser
         [JsonPropertyName("Slant")]
         public double Slant { get; set; } = 0;
 
+        [JsonPropertyName("IsSymmetric")]
+        public bool IsSymmetric { get; set; } = false;
+
         [JsonPropertyName("SelectedSlab")]
         public PrssmSlab? SelectedSlab { get; set; } = null;
 
@@ -43,11 +46,26 @@ namespace ArgoParser
         [JsonPropertyName("SelectedBeamSpanType")]
         public PrssmSpanType SelectedBeamSpanType { get; set; } = new();
 
+        [JsonPropertyName("IsPlateModel")]
+        public bool IsPlateModel { get; set; } = false;
+
+        [JsonPropertyName("PlateModelMaxSegmentLength")]
+        public double PlateModelMaxSegmentLength { get; set; } = 0;
+
         [JsonPropertyName("Loads")]
         public List<PrssmBeamSpanLoadData>? Loads { get; set; } = null;
 
         [JsonPropertyName("SelfWeights")]
         public List<PrssmBeamSpanSelfWeightData>? SelfWeights { get; set; } = null;
+
+        [JsonPropertyName("IsMovingLoadsTabVisible")]
+        public bool IsMovingLoadsTabVisible { get; set; } = false;
+
+        [JsonPropertyName("MovingLoadPassagesNumber")]
+        public int MovingLoadPassagesNumber { get; set; } = 0;
+
+        [JsonPropertyName("MovingLoadPassages")]
+        public List<PrssmBeamSpanMovingLoadPassageData> MovingLoadPassages { get; set; } = new();
     }
 
     /// <summary>
@@ -567,6 +585,45 @@ namespace ArgoParser
 
         [JsonPropertyName("Thickness")]
         public double Thickness { get; set; }
+    }
+
+    public class PrssmBeamSpanMovingLoadPassageData
+    {
+        [JsonPropertyName("Id")]
+        public int Id { get; set; }
+
+        [JsonPropertyName("PassageWidth")]
+        public double PassageWidth { get; set; }
+
+        [JsonPropertyName("Vehicle")]
+        public object? Vehicle { get; set; }
+
+        [JsonPropertyName("VehicleId")]
+        public int VehicleId { get; set; }
+
+        [JsonPropertyName("LanesNumber")]
+        public int LanesNumber { get; set; } = 1;
+
+        [JsonPropertyName("LimitGroupKeys")]
+        public List<string> LimitGroupKeys { get; set; } = new();
+
+        [JsonPropertyName("PanelNumber")]
+        public int PanelNumber { get; set; }
+
+        [JsonPropertyName("Panels")]
+        public List<PrssmBeamSpanMovingLoadPanelData> Panels { get; set; } = new();
+    }
+
+    public class PrssmBeamSpanMovingLoadPanelData
+    {
+        [JsonPropertyName("Length")]
+        public double Length { get; set; }
+
+        [JsonPropertyName("EccentricityStart")]
+        public double EccentricityStart { get; set; }
+
+        [JsonPropertyName("EccentricityEnd")]
+        public double EccentricityEnd { get; set; }
     }
 
     public class PrssmSpanType
