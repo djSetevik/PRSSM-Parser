@@ -1,0 +1,26 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>PRSSM-Parser</AssemblyName>
+    <RootNamespace>PrssmParser</RootNamespace>
+    <Product>PRSSM-Parser</Product>
+    <Title>PRSSM-Parser</Title>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="GeometryLibrary">
+      <HintPath>..\GeometryLibrary.dll</HintPath>
+    </Reference>
+    <Reference Include="UnitLibrary">
+      <HintPath>..\UnitLibrary.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="Data\RAW\**\*;Data\BDF\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

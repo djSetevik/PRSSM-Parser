@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="PRSSM-Parser/PRSSM-Parser.csproj" />
+  <Project Path="PRSSM-Parser.Tests/PRSSM-Parser.Tests.csproj" />
+</Solution>
