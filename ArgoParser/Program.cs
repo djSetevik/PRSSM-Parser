@@ -5,7 +5,6 @@ using System.Linq;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace ArgoParser
 {
@@ -19,8 +18,7 @@ namespace ArgoParser
             Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
             Console.WriteLine();
 
-            // Определяем папки Data/RAW и Data/PRSSM относительно проекта
-            // Определяем папки Data/RAW и Data/PRSSM относительно проекта
+            // Папки данных находятся рядом с исполняемым файлом.
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
             string rawFolder = Path.Combine(baseDir, "Data", "RAW");
             string prssmFolder = Path.Combine(baseDir, "Data", "PRSSM");

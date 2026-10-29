@@ -34,35 +34,20 @@ namespace ArgoParser
             var material = ConvertConcreteMaterial(argoDoc.GlobalParams);
             double firstBeamCoord = argoDoc.GlobalParams.BeamCoordinates.FirstOrDefault();
 
-            double midAxisZ = 0;
-            if (argoDoc.GlobalParams.BeamCoordinates.Count > 0)
-                midAxisZ = (argoDoc.GlobalParams.BeamCoordinates.First() + argoDoc.GlobalParams.BeamCoordinates.Last()) / 2.0;
-
-            double globalLeftEdge = double.PositiveInfinity;
-            double globalRightEdge = double.NegativeInfinity;
-
             for (int i = 0; i < argoDoc.Beams.Count; i++)
             {
                 var argoBeam = argoDoc.Beams[i];
                 double beamAxisZ_cm = argoDoc.GlobalParams.BeamCoordinates[i];
 
-                // 1) Контур + измененные точки
-                var contour = ApplyChangedPoints(argoBeam);
+                // Базовый контур поперечного сечения.
+                var contour = GetBaseContour(argoBeam);
 
                 // 2) Перевод в мм относительно оси балки
                 var pts = ConvertArgoContour(contour, beamAxisZ_cm);
 
-                // 3) Зеркалирование
-                bool desiredRight = beamAxisZ_cm > midAxisZ + 1e-6;
-                bool needMirror = NeedMirrorByOverhang(pts, desiredRight, i, argoDoc.Beams.Count);
-
-                if (needMirror)
-                    pts = pts.Select(p => (-p.X, p.Y)).ToList();
-
-                // 4) Границы профиля
-                double profileMinX = pts.Min(p => p.X);
-                double profileMaxX = pts.Max(p => p.X);
-                double profileMinY = pts.Min(p => p.Y);
+                // ARGO contours already use bridge-wide Z coordinates. Mirroring
+                // an asymmetric inner beam here moves its flange joints by 90 mm.
+                const bool needMirror = false;
 
                 // 5) Вычисляем ЦТ исходного профиля
                 ComputeCentroid(pts, out double gcX_mm, out double gcY_mm);
@@ -116,8 +101,9 @@ namespace ArgoParser
                 // Ширина ребра
                 double ribWidth = Math.Abs(point3_X - point4_X);
 
-                // OffsetY = смещение от оси ребра до ЦТ
-                double offsetY = ribAxisX_centered;
+                // Keep the ARGO beam axis, which need not pass through the rib
+                // center (e.g. N6). In the centered profile its X is -gcX_mm.
+                double offsetY = -gcX_mm;
 
                 // OffsetZ = Y координата низа ребра
                 double offsetZ = point4_Y;
@@ -148,28 +134,8 @@ namespace ArgoParser
                     ribTopY = FindRibTopAtCenter(profileCentered, ribAxisX_centered);
                 }
 
-                // 10) Обновляем section.Yc/Zc в единицах FEModel/Paris (мм).
-                // Раньше здесь было деление на 1000, из-за чего Yc/Zc оказывались в метрах,
-                // а Area/Iyy/Izz оставались в мм-системе.
-                section.Yc = Math.Round(offsetY, 2);
-                section.Zc = Math.Round(-offsetZ, 2);
-
-                // 11) Смещения профиля относительно оси ребра (для расчёта позиции балок)
-                double ribAxisX_orig = gcX_mm + ribAxisX_centered;
-                double profileLeftFromRib = profileMinX - ribAxisX_orig;
-                double profileRightFromRib = profileMaxX - ribAxisX_orig;
-
-                // 12) Базовая позиция оси ребра
-                double axisPositionMm = (beamAxisZ_cm - firstBeamCoord) * 10.0;
-                double positionMm = axisPositionMm;
-
-                // 13) Глобальные координаты краёв профиля
-                double currentLeftEdge = positionMm + profileLeftFromRib;
-                double currentRightEdge = positionMm + profileRightFromRib;
-
-                // 14) Не сдвигаем балки искусственно: Position должен соответствовать исходным осям АРГО.
-                globalLeftEdge = Math.Min(globalLeftEdge, currentLeftEdge);
-                globalRightEdge = Math.Max(globalRightEdge, currentRightEdge);
+                // Положение балки соответствует исходной оси АРГО.
+                double positionMm = (beamAxisZ_cm - firstBeamCoord) * 10.0;
 
                 double stepMm = 0;
                 if (i > 0)
@@ -177,8 +143,6 @@ namespace ArgoParser
 
                 // 15) Границы центрированного профиля
                 double profMinY = cadPoints.Min(p => p.Y);
-                double profMaxY = cadPoints.Max(p => p.Y);
-
                 // 16) PrssmSection
                 var prssmSection = ConvertSectionToPrssm(section, shape, i, offsetY, offsetZ);
 
@@ -239,21 +203,23 @@ namespace ArgoParser
                 prssmBeam.BeamPartsNumber = prssmBeam.BeamParts.Count;
                 prssmBeam.Length = Math.Round(prssmBeam.BeamParts.Sum(bp => bp.Length), 2);
 
-                // 18) BindingPoint — локальные координаты точки 4 относительно точки привязки (низ-ось ребра)
-                double bindingX_local = point4_X - ribAxisX_centered;
-                double bindingY_local = 0;
+                // PARIS restores the saved Id from Section.UpdateStressPoints.
+                // Point 4 can be on the outer curb of an asymmetric section,
+                // rather than at the rib's lower-left corner.
+                var anchor4 = prssmSection.StressPoints[3];
 
                 // В BeamSpanData BindingPoint хранится в общей системе координат Y/Z
                 // всего пролётного строения. Это видно по эталонному not_PLITA.prssm:
                 // для каждой балки BindingPoint.X = Beam.Position + локальное смещение.
-                // Если записывать только локальное bindingX_local, Paris привязывает
-                // арматуру всех балок к одной и той же поперечной координате.
-                var bindingPointGlobal = new PrssmPoint(
-                    x: Math.Round(positionMm + bindingX_local, 2),
-                    y: Math.Round(bindingY_local, 2)
-                );
+                var bindingPointGlobal = new PrssmBindingPoint
+                {
+                    Id = 4,
+                    Position = new PrssmPoint(
+                        x: Math.Round(positionMm + anchor4.X - prssmSection.OffsetY, 2),
+                        y: Math.Round(anchor4.Y - prssmSection.OffsetZ, 2))
+                };
 
-                var llLocal = new ParisPoint2D(point4_X, point4_Y);
+                var llLocal = new ParisPoint2D(anchor4.X, anchor4.Y);
 
                 // 19) Арматура
                 ConvertLongitudinalReinforcement(
@@ -262,7 +228,7 @@ namespace ArgoParser
                     bindingPointGlobal,
                     llLocal,
                     profMinY, ribTopY,
-                    ribAxisX_centered,
+                    -gcX_mm,
                     ribWidth);
 
                 ConvertTransverseReinforcement(
@@ -488,32 +454,6 @@ namespace ArgoParser
             cy /= (6.0 * signedArea);
         }
 
-        private bool NeedMirrorByOverhang(List<(double X, double Y)> pts, bool desiredRight, int beamIndex, int totalBeams)
-        {
-            // Для крайних балок определяем по позиции относительно центра
-            // Первая балка — свес должен быть слева (desiredRight = false)
-            // Последняя балка — свес должен быть справа (desiredRight = true)
-
-            double minX = pts.Min(p => p.X);
-            double maxX = pts.Max(p => p.X);
-
-            double leftOverhang = -minX;  // насколько выступает влево от оси
-            double rightOverhang = maxX;  // насколько выступает вправо от оси
-
-            // Если разница свесов маленькая — сечение почти симметричное
-            if (Math.Abs(rightOverhang - leftOverhang) < 50)
-            {
-                // Для симметричных сечений не зеркалируем
-                return false;
-            }
-
-            // Определяем куда сейчас выступает сечение
-            bool currentlyRight = rightOverhang > leftOverhang;
-
-            // Зеркалируем если текущее направление не совпадает с желаемым
-            return currentlyRight != desiredRight;
-        }
-
         private double DetectZScale(List<double> zCoords, double ribWidthMm)
         {
             if (zCoords == null || zCoords.Count < 2) return 10.0;
@@ -531,7 +471,7 @@ namespace ArgoParser
 
         #region Контур
 
-        private List<ArgoPoint2D> ApplyChangedPoints(Beam argoBeam)
+        private List<ArgoPoint2D> GetBaseContour(Beam argoBeam)
         {
             // ВАЖНО.
             // ChangedPoints/ChangedPoints2 в АРГО описывают изменение контура в других
@@ -548,34 +488,6 @@ namespace ArgoParser
                 .ToList();
 
             return NormalizeContour(contour);
-        }
-
-        private void ApplyPointChanges(
-            List<ArgoPoint2D> contour,
-            IReadOnlyList<int> indices,
-            IReadOnlyList<ArgoPoint2D> points)
-        {
-            if (contour.Count == 0 || indices == null || points == null) return;
-
-            int count = Math.Min(indices.Count, points.Count);
-            for (int i = 0; i < count; i++)
-            {
-                int idx = indices[i];
-
-                // По инструкции точки нумеруются с 1. Для устойчивости поддерживаем
-                // и 0-based индексы, если такие встретятся в нестандартном файле.
-                int zeroBased = idx >= 1 && idx <= contour.Count
-                    ? idx - 1
-                    : idx;
-
-                if (zeroBased < 0 || zeroBased >= contour.Count)
-                {
-                    Console.WriteLine($"  WARNING: индекс изменённой точки {idx} вне контура из {contour.Count} точек");
-                    continue;
-                }
-
-                contour[zeroBased] = new ArgoPoint2D(points[i].Z, points[i].Y);
-            }
         }
 
         private List<ArgoPoint2D> NormalizeContour(List<ArgoPoint2D> contour)
@@ -712,11 +624,12 @@ namespace ArgoParser
             double iyyOrigin = iyy0 / 12.0;
             double ixyOrigin = ixy0 / 24.0;
 
-            // Моменты относительно центра тяжести. Берём модуль, чтобы ориентация обхода
-            // контура по/против часовой стрелки не давала отрицательные характеристики.
+            // Моменты относительно центра тяжести. Нормализуем ориентацию обхода контура:
+            // Ixx/Iyy остаются положительными, а геометрический знак Ixy сохраняется.
+            double orientation = Math.Sign(signedArea);
             double ixxC = Math.Abs(ixxOrigin - signedArea * cy * cy);
             double iyyC = Math.Abs(iyyOrigin - signedArea * cx * cx);
-            double ixyC = Math.Abs(ixyOrigin - signedArea * cx * cy);
+            double ixyC = orientation * (ixyOrigin - signedArea * cx * cy);
 
             double minX = points.Min(p => p.X);
             double maxX = points.Max(p => p.X);
@@ -757,36 +670,51 @@ namespace ArgoParser
             if (points == null || points.Count == 0)
                 return new List<ParisPoint2D>();
 
-            double minX = points.Min(p => p.X);
-            double maxX = points.Max(p => p.X);
-            double minY = points.Min(p => p.Y);
-            double maxY = points.Max(p => p.Y);
-            double tolY = Math.Max(1.0, (maxY - minY) / 100.0);
-            double tolX = Math.Max(1.0, (maxX - minX) / 100.0);
-
-            var top = points.Where(p => Math.Abs(p.Y - maxY) <= tolY).ToList();
-            var bottom = points.Where(p => Math.Abs(p.Y - minY) <= tolY).ToList();
-            var left = points.Where(p => Math.Abs(p.X - minX) <= tolX).ToList();
-            var right = points.Where(p => Math.Abs(p.X - maxX) <= tolX).ToList();
-
-            (double X, double Y) topLeft = top.OrderBy(p => p.X).FirstOrDefault();
-            (double X, double Y) topRight = top.OrderByDescending(p => p.X).FirstOrDefault();
-            (double X, double Y) bottomRight = bottom.OrderByDescending(p => p.X).FirstOrDefault();
-            (double X, double Y) bottomLeft = bottom.OrderBy(p => p.X).FirstOrDefault();
-
-            // Если какой-то уровень не нашёлся, берём крайние точки по соответствующим координатам.
-            if (top.Count == 0) topLeft = left.OrderByDescending(p => p.Y).First();
-            if (top.Count == 0) topRight = right.OrderByDescending(p => p.Y).First();
-            if (bottom.Count == 0) bottomRight = right.OrderBy(p => p.Y).First();
-            if (bottom.Count == 0) bottomLeft = left.OrderBy(p => p.Y).First();
-
-            return new List<ParisPoint2D>
+            // Same anchor selection as FEModel.Property.Section.UpdateStressPoints.
+            // With Mz = Izz / Iyy * My * 0.099, the comparison within each
+            // centroid quadrant reduces to |z| + 0.099 * |y|.
+            var anchors = points.Where((p, i) => IsProfilePoint(points, i)).Distinct().ToArray();
+            ComputeCentroid(points, out double cx, out double cy);
+            double minX = anchors.Min(p => p.X);
+            double maxX = anchors.Max(p => p.X);
+            double minY = anchors.Min(p => p.Y);
+            double maxY = anchors.Max(p => p.Y);
+            double tolerance = Math.Min(maxX - minX, maxY - minY) / 100.0;
+            bool findByX = !(anchors.Count(p => Math.Abs(p.X - maxX) < tolerance) == 1 &&
+                             anchors.Count(p => Math.Abs(p.X - minX) < tolerance) == 1);
+            bool findByY = !(anchors.Count(p => Math.Abs(p.Y - maxY) < tolerance) == 1 &&
+                             anchors.Count(p => Math.Abs(p.Y - minY) < tolerance) == 1);
+            if (!findByX && !findByY)
             {
-                new ParisPoint2D(topLeft.X, topLeft.Y),
-                new ParisPoint2D(topRight.X, topRight.Y),
-                new ParisPoint2D(bottomRight.X, bottomRight.Y),
-                new ParisPoint2D(bottomLeft.X, bottomLeft.Y)
-            };
+                return new[]
+                {
+                    anchors.First(p => Math.Abs(p.X - minX) < tolerance),
+                    anchors.First(p => Math.Abs(p.Y - maxY) < tolerance),
+                    anchors.First(p => Math.Abs(p.X - maxX) < tolerance),
+                    anchors.First(p => Math.Abs(p.Y - minY) < tolerance)
+                }.Select(p => new ParisPoint2D(p.X, p.Y)).ToList();
+            }
+
+            var selected = new (double X, double Y)?[4];
+            var scores = new double[4];
+            foreach (var p in anchors)
+            {
+                double x = p.X - cx;
+                double y = p.Y - cy;
+                if (x == 0 || y == 0) continue;
+                int index = y > 0 ? (x < 0 ? 0 : 1) : (x < 0 ? 3 : 2);
+                double score = Math.Abs(y) + 0.099 * Math.Abs(x);
+                if (score > scores[index])
+                {
+                    scores[index] = score;
+                    selected[index] = p;
+                }
+            }
+            selected[0] ??= anchors.OrderByDescending(p => p.Y).ThenBy(p => p.X).First();
+            selected[1] ??= anchors.OrderByDescending(p => p.Y).ThenByDescending(p => p.X).First();
+            selected[2] ??= anchors.OrderBy(p => p.Y).ThenByDescending(p => p.X).First();
+            selected[3] ??= anchors.OrderBy(p => p.Y).ThenBy(p => p.X).First();
+            return selected.Select(p => new ParisPoint2D(p!.Value.X, p.Value.Y)).ToList();
         }
 
         #endregion
@@ -946,10 +874,10 @@ namespace ArgoParser
             Beam argoBeam, ArgoDocument argoDoc,
             PrssmBeam prssmBeam,
             List<ParisCadPoint2D> profilePoints,
-            PrssmPoint bindingPointGlobal,
+            PrssmBindingPoint bindingPointGlobal,
             ParisPoint2D llLocal,
             double profMinY, double ribTopY,
-            double ribAxisXLocal,
+            double beamAxisXLocal,
             double ribWidth)
         {
             var detailed = argoDoc.DetailedReinforcement?.BeamDetails
@@ -958,13 +886,12 @@ namespace ArgoParser
             if (detailed == null || (detailed.TensileBars.Count == 0 && detailed.CompressedBars.Count == 0))
             {
                 ConvertLongFromCalc(argoBeam, argoDoc, prssmBeam, llLocal, bindingPointGlobal,
-                    profMinY, ribTopY, ribAxisXLocal, ribWidth);
+                    profMinY, ribTopY, beamAxisXLocal, ribWidth);
                 return;
             }
 
             double ribWidthMm = ribWidth;
             var supportExtra = (argoDoc.GlobalParams.FullLength - (argoDoc.GlobalParams.SupportAxis2 - argoDoc.GlobalParams.SupportAxis1)) / 2;
-            //var bendsIndex = -1;
             // РАСТЯНУТЫЕ
             for (int j = 0; j < detailed.TensileBars.Count && j < argoBeam.TensileBars.Count; j++)
             {
@@ -984,17 +911,15 @@ namespace ArgoParser
                     var sortedZ = dg.ZCoordinates.OrderBy(z => z).ToList();
                     double zScale = DetectZScale(sortedZ, ribWidthMm);
 
-                    double firstX = ribAxisXLocal + sortedZ.First() * zScale;
-                    double lastX = ribAxisXLocal + sortedZ.Last() * zScale;
+                    double firstX = beamAxisXLocal + sortedZ.First() * zScale;
+                    double lastX = beamAxisXLocal + sortedZ.Last() * zScale;
 
                     yFirstAbs = firstX;
                     stepElement = (dg.Count > 1) ? (lastX - firstX) / (dg.Count - 1) : 0;
                 }
 
-                //double zAbs = profMinY + (cb.DeltaLower * 10);
-
                 double yOffset = yFirstAbs - llLocal.X;
-                double zOffset = cb.DeltaLower * 10 /*zAbs - profMinY*/;
+                double zOffset = profMinY + cb.DeltaLower * 10 - llLocal.Y;
                 double xOffset = (supportExtra + cb.XMin) * 10;
 
                 var bendSegment = new PrssmReinforcementSegment { IsFirst = true };
@@ -1030,7 +955,6 @@ namespace ArgoParser
                 {
                     prssmBeam.ReinforcementLongitudinals.Last().Segments.Insert(0, bendSegment);
                     prssmBeam.ReinforcementLongitudinals.Last().Segments.Add(new PrssmReinforcementSegment() { Angle = -bendSegment.Angle, Length = bendSegment.Length, Height = bendSegment.Height });
-                    //bendsIndex++;
                 }
             }
 
@@ -1049,8 +973,8 @@ namespace ArgoParser
                     var sortedZ = dg.ZCoordinates.OrderBy(z => z).ToList();
                     double zScale = DetectZScale(sortedZ, ribWidthMm);
 
-                    double firstX = ribAxisXLocal + sortedZ.First() * zScale;
-                    double lastX = ribAxisXLocal + sortedZ.Last() * zScale;
+                    double firstX = beamAxisXLocal + sortedZ.First() * zScale;
+                    double lastX = beamAxisXLocal + sortedZ.Last() * zScale;
 
                     yFirstAbs = firstX;
                     stepElement = (dg.Count > 1) ? (lastX - firstX) / (dg.Count - 1) : 0;
@@ -1087,7 +1011,7 @@ namespace ArgoParser
             ArgoDocument argoDoc,
             PrssmBeam prssmBeam,
             ParisPoint2D llLocal,
-            PrssmPoint bindingPointGlobal,
+            PrssmBindingPoint bindingPointGlobal,
             double profMinY,
             double ribTopY,
             double ribAxisXLocal,
@@ -1162,7 +1086,7 @@ namespace ArgoParser
         private void ConvertTransverseReinforcement(
     Beam argoBeam, ArgoDocument argoDoc, PrssmBeam prssmBeam,
     IEnumerable<ParisCadPoint2D> profilePoints,
-    PrssmPoint bindingPoint,
+    PrssmBindingPoint bindingPoint,
     ParisPoint2D llLocal,
     double ribWidth,
     double profMinY,
@@ -1232,8 +1156,9 @@ namespace ArgoParser
                             IsClosed = true,
                             StepElement = step_mm,
                             OffsetFromStart = offsetFromStart_mm,
-                            YOffset = coverSide * i,
-                            ZOffset = stirrupH + coverBottom,
+                            YOffset = profilePoints.Where(p => Math.Abs(p.Y - profMinY) < 5).Min(p => p.X)
+                                + coverSide * i - llLocal.X,
+                            ZOffset = profMinY + stirrupH + coverBottom - llLocal.Y,
                             BindingPoint = bindingPoint,
                             SegmentCount = 3,
                             Segments = new List<PrssmReinforcementSegment>
@@ -1254,7 +1179,7 @@ namespace ArgoParser
             Beam argoBeam,
             ArgoDocument argoDoc,
             PrssmBeam prssmBeam,
-            PrssmPoint bindingPoint,
+            PrssmBindingPoint bindingPoint,
             ParisPoint2D llLocal,
             double beamAxisZ_cm,
             double sectionGcX_mm,

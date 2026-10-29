@@ -151,6 +151,9 @@ namespace ArgoParser
 
         [JsonPropertyName("Детализация")]
         public DetailedReinforcement DetailedReinforcement { get; set; }
+
+        [JsonPropertyName("ИзмененияДиаметровСтержней")]
+        public List<ChangedBarDiameter> ChangedBarDiameters { get; set; } = new List<ChangedBarDiameter>();
     }
 
     public class Header
@@ -295,6 +298,12 @@ namespace ArgoParser
         [JsonPropertyName("ИзмененныеТочки")]
         public List<Point2D> ChangedPoints { get; set; } = new List<Point2D>();
 
+        [JsonPropertyName("ПродольнаяСимметрияИзмененияКонтура")]
+        public bool HasLongitudinalContourSymmetry { get; set; } = true;
+
+        [JsonPropertyName("ГруппыИзмененияКонтура")]
+        public List<ChangedContourGroup> ChangedContourGroups { get; set; } = new List<ChangedContourGroup>();
+
         [JsonPropertyName("Отгибы")]
         public List<BendReinforcement> Bends { get; set; } = new List<BendReinforcement>();
 
@@ -313,6 +322,15 @@ namespace ArgoParser
 
         [JsonPropertyName("АсимметрияАрмироманияОтгибов")]
         public double BendSymmetryFlag { get; set; }
+    }
+
+    public class ChangedContourGroup
+    {
+        [JsonPropertyName("ИндексыТочек")]
+        public List<int> PointIndices { get; set; } = new List<int>();
+
+        [JsonPropertyName("КоординатыТочек")]
+        public List<Point2D> Points { get; set; } = new List<Point2D>();
     }
 
     public class SlabReinforcement
@@ -425,6 +443,9 @@ namespace ArgoParser
         [JsonPropertyName("АрматураПлиты")]
         public List<PlateBarInfo> PlateBars { get; set; } = new List<PlateBarInfo>();
 
+        [JsonPropertyName("ФизическаяАрматураПлиты")]
+        public List<DetailedSlabBar> SlabBars { get; set; } = new List<DetailedSlabBar>();
+
         [JsonPropertyName("Отгибы")]
         public List<DetailedBendGroup> Bends { get; set; } = new List<DetailedBendGroup>();
 
@@ -454,6 +475,30 @@ namespace ArgoParser
 
         [JsonPropertyName("Шаг")]
         public double Step { get; set; }
+    }
+
+    public class DetailedSlabBar
+    {
+        [JsonPropertyName("КоличествоНаМетр")]
+        public int BarsPerMeter { get; set; }
+
+        [JsonPropertyName("Диаметр")]
+        public double Diameter { get; set; }
+    }
+
+    public class ChangedBarDiameter
+    {
+        [JsonPropertyName("НомерБалки")]
+        public int BeamNumber { get; set; }
+
+        [JsonPropertyName("НомерСтержня")]
+        public int BarNumber { get; set; }
+
+        [JsonPropertyName("РасстояниеДоОсиБалки")]
+        public double DistanceFromBeamAxis { get; set; }
+
+        [JsonPropertyName("Диаметр")]
+        public double Diameter { get; set; }
     }
 
     public class DetailedBendGroup

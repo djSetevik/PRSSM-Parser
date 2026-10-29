@@ -91,7 +91,7 @@ namespace ArgoParser
         [JsonPropertyName("Position")]
         public double Position { get; set; }
 
-        [JsonIgnore]
+        [JsonPropertyName("Length")]
         public double Length { get; set; }
 
         [JsonPropertyName("R")]
@@ -158,6 +158,9 @@ namespace ArgoParser
         [JsonPropertyName("Name")]
         public string Name { get; set; } = "Custom";
 
+        [JsonPropertyName("ColorArgb")]
+        public uint ColorArgb { get; set; } = 0;
+
         [JsonPropertyName("SectionType")]
         public int SectionType { get; set; } = 1; // FEModel.SectionType.Custom
 
@@ -221,8 +224,14 @@ namespace ArgoParser
         [JsonPropertyName("Shapes")]
         public List<PrssmShape> Shapes { get; set; } = new();
 
+        [JsonPropertyName("BaseContourMaterialId")]
+        public int BaseContourMaterialId { get; set; } = -1;
+
         [JsonPropertyName("StressPoints")]
         public List<PrssmPoint> StressPoints { get; set; } = new();
+
+        [JsonPropertyName("ReducedCentroid")]
+        public PrssmPoint ReducedCentroid { get; set; } = new();
 
         [JsonPropertyName("WeightFactor")]
         public double WeightFactor { get; set; } = 1;
@@ -230,11 +239,6 @@ namespace ArgoParser
         [JsonPropertyName("Id")]
         public int Id { get; set; }
 
-        [JsonPropertyName("StartShapes")]
-        public List<object> StartShapes { get; set; } = new();
-
-        [JsonPropertyName("EndShapes")]
-        public List<object> EndShapes { get; set; } = new();
     }
 
     /// <summary>
@@ -274,6 +278,15 @@ namespace ArgoParser
 
         [JsonPropertyName("SelectedRegionType")]
         public int SelectedRegionType { get; set; } = 0;
+
+        [JsonPropertyName("SelectedContourMaterialId")]
+        public int SelectedContourMaterialId { get; set; } = -1;
+
+        [JsonPropertyName("ContourEFactor")]
+        public double ContourEFactor { get; set; } = 1;
+
+        [JsonPropertyName("ContourWeightFactor")]
+        public double ContourWeightFactor { get; set; } = 1;
 
         [JsonPropertyName("Profile")]
         public List<PrssmProfileRegion> Profile { get; set; } = new();
@@ -330,6 +343,9 @@ namespace ArgoParser
 
         [JsonPropertyName("MaterialType")]
         public int MaterialType { get; set; } = 0;
+
+        [JsonPropertyName("ColorArgb")]
+        public uint ColorArgb { get; set; } = 0;
 
         [JsonPropertyName("StandartMaterialType")]
         public int StandartMaterialType { get; set; }
@@ -400,6 +416,42 @@ namespace ArgoParser
         [JsonPropertyName("Radius")]
         public double Radius { get; set; } = 0;
 
+        [JsonPropertyName("IsPrestressed")]
+        public bool IsPrestressed { get; set; } = false;
+
+        [JsonPropertyName("BundleTension")]
+        public double BundleTension { get; set; } = 0;
+
+        [JsonPropertyName("AnchorDrawIn")]
+        public double AnchorDrawIn { get; set; } = 0;
+
+        [JsonPropertyName("FrictionCoefficient")]
+        public double FrictionCoefficient { get; set; } = 0;
+
+        [JsonPropertyName("WobbleCoefficient")]
+        public double WobbleCoefficient { get; set; } = 0;
+
+        [JsonPropertyName("FormDeformationLoss")]
+        public double FormDeformationLoss { get; set; } = 30;
+
+        [JsonPropertyName("TemperatureDifference")]
+        public double TemperatureDifference { get; set; } = 0;
+
+        [JsonPropertyName("PrestressingMethod")]
+        public int PrestressingMethod { get; set; } = 0;
+
+        [JsonPropertyName("JackingType")]
+        public int JackingType { get; set; } = 0;
+
+        [JsonPropertyName("LossMode")]
+        public int LossMode { get; set; } = 1;
+
+        [JsonPropertyName("AnchorEnd")]
+        public int AnchorEnd { get; set; } = 0;
+
+        [JsonPropertyName("DuctType")]
+        public int DuctType { get; set; } = 0;
+
         [JsonIgnore]
         public bool IsLine { get; set; } = true;
 
@@ -440,7 +492,7 @@ namespace ArgoParser
         public PrssmMaterial Material { get; set; }
 
         [JsonPropertyName("BindingPoint")]
-        public PrssmPoint BindingPoint { get; set; }
+        public PrssmBindingPoint BindingPoint { get; set; } = new();
 
         [JsonIgnore]
         public bool IsSelected { get; set; } = false;
@@ -485,7 +537,7 @@ namespace ArgoParser
         public List<PrssmReinforcementSegment> Segments { get; set; } = new();
 
         [JsonPropertyName("BindingPoint")]
-        public PrssmPoint BindingPoint { get; set; }
+        public PrssmBindingPoint BindingPoint { get; set; } = new();
 
         [JsonIgnore]
         public bool IsSelected { get; set; } = false;
@@ -505,8 +557,23 @@ namespace ArgoParser
         [JsonPropertyName("Radius")]
         public double Radius { get; set; } = 0;
 
+        [JsonPropertyName("FrictionCoefficient")]
+        public double FrictionCoefficient { get; set; } = 0;
+
+        [JsonPropertyName("WobbleCoefficient")]
+        public double WobbleCoefficient { get; set; } = 0;
+
         [JsonIgnore]
         public bool IsFirst { get; set; } = false;
+    }
+
+    public class PrssmBindingPoint
+    {
+        [JsonPropertyName("Id")]
+        public int Id { get; set; } = 4;
+
+        [JsonPropertyName("Position")]
+        public PrssmPoint Position { get; set; } = new();
     }
 
     public class PrssmSlab
