@@ -97,6 +97,7 @@ internal static class Program
         Console.WriteLine($"Режим: {(options.Format == InputFormat.Argo ? "АРГО-ЖБ" : "BearingCapacity (.bdf)")}; файлов: {files.Length}");
         if (options.Format == InputFormat.Bdf)
             Console.WriteLine("Каждый .bdf экспортируется как одна типовая балка. Замечания и исходные параметры — в conversion-report.json.");
+        else Console.WriteLine("Замечания по конвертации АРГО — в conversion-report.json.");
         if (options.Interactive && !single)
         {
             for (int i = 0; i < files.Length; i++) Console.WriteLine($"{i + 1}: {Path.GetRelativePath(sourceRoot, files[i])}");
@@ -126,35 +127,46 @@ internal static class Program
                     var result = new BdfToPrssmConverter().Convert(source);
                     document = result.Document; warnings = result.Warnings;
                 }
-                else document = ConvertArgo(file);
+                else
+                {
+                    var result = ConvertArgo(file);
+                    document = result.Document; warnings = result.Warnings;
+                }
                 string name = options.Format == InputFormat.Argo ? Path.GetFileName(file).Replace('.', '_') : Path.GetFileNameWithoutExtension(file);
                 string target = Path.Combine(options.Output, Path.GetDirectoryName(relative) ?? "", name + ".prssm");
                 Directory.CreateDirectory(Path.GetDirectoryName(target)!);
                 SaveJson(target, document);
                 Console.WriteLine($"✓ {relative}{(warnings.Count > 0 ? $" — замечаний: {warnings.Count}" : "")}");
+                foreach (string warning in warnings)
+                    Console.WriteLine($"  WARNING: {relative}: {warning}");
                 success++;
                 if (warnings.Count > 0) withWarnings++;
-                if (source != null) reports.Add(new(relative, Path.GetRelativePath(options.Output, target), source, warnings, null));
+                reports.Add(new(relative, Path.GetRelativePath(options.Output, target), source, warnings, null));
             }
             catch (Exception error)
             {
                 Console.Error.WriteLine($"✗ {relative}: {error.Message}");
                 failed++;
-                if (options.Format == InputFormat.Bdf) reports.Add(new(relative, null, source, Array.Empty<string>(), error.Message));
+                reports.Add(new(relative, null, source, Array.Empty<string>(), error.Message));
             }
         }
-        if (options.Format == InputFormat.Bdf) SaveJson(Path.Combine(options.Output, "conversion-report.json"), reports);
+        SaveJson(Path.Combine(options.Output, "conversion-report.json"), reports);
         Console.WriteLine($"Итого: {success} успешно, {failed} ошибок, {withWarnings} с замечаниями. Результаты: {options.Output}");
         return failed == 0 ? 0 : 1;
     }
 
-    private static PrssmDocument ConvertArgo(string file)
+    private static (PrssmDocument Document, IReadOnlyList<string> Warnings) ConvertArgo(string file)
     {
         var output = Console.Out;
+        using var log = new StringWriter();
         try
         {
-            Console.SetOut(TextWriter.Null);
-            return new ArgoToPrssmConverter().Convert(new ArgoParser().Parse(file));
+            Console.SetOut(log);
+            var document = new ArgoToPrssmConverter().Convert(new ArgoParser().Parse(file));
+            var warnings = log.ToString().Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(line => line.Trim()).Where(line => line.StartsWith("WARNING:", StringComparison.Ordinal))
+                .Select(line => line["WARNING:".Length..].Trim()).Distinct().ToArray();
+            return (document, warnings);
         }
         finally { Console.SetOut(output); }
     }
