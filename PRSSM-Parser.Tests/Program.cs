@@ -77,6 +77,81 @@ Run("Profiles match original BearingCapacity DLL", () =>
         }
     }
 });
+Run("BDF selects native RCI and RCT shapes from the PARIS catalogue", () =>
+{
+    foreach (var (prefix, type, catalogue, height, width) in new[]
+    {
+        ("[226000]", 108, "S3_503_1_81_1318", 900.0, 1400.0),
+        ("[195000]", 110, "S3_503_1_73", 900.0, 1300.0)
+    })
+    {
+        var source = new BdfParser().Parse(Directory.GetFiles("PRSSM-Parser/Data/BDF", prefix + "*.bdf").Single());
+        var converted = new BdfToPrssmConverter().Convert(source);
+        var section = converted.Document.Beams.Single().BeamParts[0].Section;
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(section));
+        var shape = json.RootElement.GetProperty("Shapes")[0];
+        Check(shape.GetProperty("CadType").GetInt32() == type, source.SourceFileName + ": native section was not selected");
+        Check(shape.GetProperty("Name").GetString()!.Contains(catalogue), "Selected catalogue is not identified");
+        Near(height, shape.GetProperty("H").GetDouble());
+        Near(width, shape.GetProperty("B1").GetDouble());
+        Near(160, shape.GetProperty("TW").GetDouble());
+        Near(type == 108 ? 300 : 200, shape.GetProperty("R1").GetDouble());
+        Check(!converted.Warnings.Any(w => w.Contains("TypicalShapes.csv")), "A known section was reported as unmatched");
+    }
+});
+Run("Catalogue matching uses geometry and preserves consoles on renamed BDF files", () =>
+{
+    var source = new BdfParser().Parse(Directory.GetFiles("PRSSM-Parser/Data/BDF", "[226000]*.bdf").Single());
+    source.SourceFileName = "renamed.bdf"; source.ProjectType = "";
+    source.Beam.ConsoleSide = "Слева"; source.Beam.ConsoleLength = .125;
+    var section = new BdfToPrssmConverter().Convert(source).Document.Beams.Single().BeamParts[0].Section;
+    using var json = JsonDocument.Parse(JsonSerializer.Serialize(section));
+    var shape = json.RootElement.GetProperty("Shapes")[0];
+    Check(shape.GetProperty("CadType").GetInt32() == 108, "Filename was used instead of the actual section dimensions");
+    Near(125, shape.GetProperty("K1").GetDouble()); Near(0, shape.GetProperty("K2").GetDouble());
+    Near(1525, section.Byy);
+});
+Run("Changed BDF geometry retains a custom section and reports the catalogue miss", () =>
+{
+    foreach (string changed in new[] { "height", "radius", "bottom haunch", "negative console" })
+    {
+        var source = new BdfParser().Parse(Directory.GetFiles("PRSSM-Parser/Data/BDF", "[226000]*.bdf").Single());
+        switch (changed)
+        {
+            case "height": source.Beam.Height += .017; break;
+            case "radius": source.Beam.TopX += .011; break;
+            case "bottom haunch": source.Beam.BottomY += .013; break;
+            case "negative console": source.Beam.ConsoleSide = "Справа"; source.Beam.ConsoleLength = -.1; break;
+        }
+        var converted = new BdfToPrssmConverter().Convert(source);
+        Check(converted.Document.Beams[0].BeamParts[0].Section.Shapes[0].CadType == 0, changed + ": a mismatched catalogue shape was substituted");
+        Check(converted.Warnings.Any(w => w.Contains("TypicalShapes.csv")), changed + ": the catalogue miss was not reported");
+    }
+});
+Run("Unavailable or malformed catalogue preserves conversion and prints the reason", () =>
+{
+    foreach (bool malformed in new[] { false, true })
+    {
+        string folder = Path.GetFullPath(Path.Combine("artifacts", "catalogue-fallback-" + Guid.NewGuid().ToString("N")));
+        Directory.CreateDirectory(folder);
+        string original = Path.GetDirectoryName(typeof(BdfParser).Assembly.Location)!;
+        foreach (string name in new[] { "PRSSM-Parser.dll", "PRSSM-Parser.deps.json", "PRSSM-Parser.runtimeconfig.json", "GeometryLibrary.dll", "UnitLibrary.dll" })
+            File.Copy(Path.Combine(original, name), Path.Combine(folder, name));
+        if (malformed) File.WriteAllText(Path.Combine(folder, "TypicalShapes.csv"), "broken catalogue");
+        string output = Path.Combine(folder, "results");
+        string input = Path.GetFullPath(Directory.GetFiles("PRSSM-Parser/Data/BDF", "[226000]*.bdf").Single());
+        var result = LaunchAssemblyWithInput(Path.Combine(folder, "PRSSM-Parser.dll"), "", "--format", "bdf", "--input", input, "--output", output);
+        Check(result.Code == 0, result.Output);
+        using var json = JsonDocument.Parse(File.ReadAllText(Directory.GetFiles(output, "*.prssm").Single()));
+        Check(json.RootElement.GetProperty("Beams")[0].GetProperty("BeamParts")[0].GetProperty("Section")
+            .GetProperty("Shapes")[0].GetProperty("CadType").GetInt32() == 0, "Missing catalogue must preserve the source contour");
+        using var report = JsonDocument.Parse(File.ReadAllText(Path.Combine(output, "conversion-report.json")));
+        var warnings = report.RootElement[0].GetProperty("Warnings").EnumerateArray().Select(w => w.GetString()!).ToArray();
+        Check(warnings.Any(w => w.Contains("TypicalShapes.csv")), "Catalogue failure is missing from the report");
+        foreach (string warning in warnings)
+            Check(result.Output.Contains(warning), "Reported warning is missing from the console");
+    }
+});
 Run("BDF full beam, supports and reinforcement", () =>
 {
     var result = new BdfToPrssmConverter().Convert(document);
@@ -218,9 +293,12 @@ static (int Code, string Output) Launch(params string[] arguments)
     => LaunchWithInput("", arguments);
 
 static (int Code, string Output) LaunchWithInput(string input, params string[] arguments)
+    => LaunchAssemblyWithInput(typeof(BdfParser).Assembly.Location, input, arguments);
+
+static (int Code, string Output) LaunchAssemblyWithInput(string assemblyPath, string input, params string[] arguments)
 {
     var start = new ProcessStartInfo("dotnet") { RedirectStandardOutput = true, RedirectStandardError = true, RedirectStandardInput = true, CreateNoWindow = true };
-    start.ArgumentList.Add(typeof(BdfParser).Assembly.Location);
+    start.ArgumentList.Add(assemblyPath);
     foreach (string arg in arguments) start.ArgumentList.Add(arg);
     using var process = Process.Start(start)!;
     process.StandardInput.Write(input);

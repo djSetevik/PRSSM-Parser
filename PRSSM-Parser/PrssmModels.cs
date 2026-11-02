@@ -249,6 +249,11 @@ namespace PrssmParser
         [JsonPropertyName("Id")]
         public int Id { get; set; }
 
+        // Native PARIS shape dimensions are serialized alongside the common fields.
+        // Null for custom ARGO/BDF shapes, so their existing JSON remains unchanged.
+        [JsonExtensionData]
+        public Dictionary<string, object>? Parameters { get; set; }
+
         [JsonPropertyName("CadType")]
         public int CadType { get; set; } = 0; // FEModel.ShapeType.Custom
 

@@ -13,7 +13,9 @@ public sealed class BdfToPrssmConverter
         var shared = new ArgoToPrssmConverter();
         var profile = BdfGeometry.BuildProfile(document.Beam)
             .Select(p => (X: p.X * 1000.0, Y: (p.Y + document.Beam.Height) * 1000.0)).ToList();
-        var section = shared.CreateCustomSection(profile, Path.GetFileNameWithoutExtension(document.SourceFileName));
+        var section = BdfSectionCatalog.TryCreate(document, shared, out string? catalogueWarning)
+            ?? shared.CreateCustomSection(profile, Path.GetFileNameWithoutExtension(document.SourceFileName));
+        if (catalogueWarning is not null) warnings.Add(catalogueWarning);
         section.It = BdfGeometry.TorsionalInertia(document.Beam) * 1e12;
         double full = document.FullLength * 1000, span = document.SpanLength * 1000;
         double overhang = (full - span) / 2;

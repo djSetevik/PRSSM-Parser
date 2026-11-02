@@ -20,7 +20,8 @@
     <Reference Include="DockingManager"><HintPath>$(ParisRoot)/DockingManager/bin/Debug/net8.0-windows7.0/DockingManager.dll</HintPath></Reference>
     <Reference Include="DotNetProjects.Wpf.Extended.Toolkit"><HintPath>$(ParisRoot)/Paris/bin/Debug/net8.0-windows7.0/DotNetProjects.Wpf.Extended.Toolkit.dll</HintPath></Reference>
     <Reference Include="FEModel"><HintPath>$(ParisRoot)/FEModel/bin/Debug/net8.0/FEModel.dll</HintPath></Reference>
-    <Reference Include="GeometryLibrary"><HintPath>../GeometryLibrary.dll</HintPath></Reference>
+    <Reference Include="GeometryLibrary"><HintPath>$(ParisRoot)/FEModel/bin/Debug/net8.0/GeometryLibrary.dll</HintPath></Reference>
+    <Reference Include="UnitLibrary"><HintPath>$(ParisRoot)/FEModel/bin/Debug/net8.0/UnitLibrary.dll</HintPath></Reference>
     <Reference Include="CrossSection.Net"><HintPath>$(ParisRoot)/FEModel/bin/Debug/net8.0/CrossSection.Net.dll</HintPath></Reference>
     <Reference Include="System.Configuration.ConfigurationManager"><HintPath>$(UserProfile)/.nuget/packages/system.configuration.configurationmanager/5.0.0/lib/netstandard2.0/System.Configuration.ConfigurationManager.dll</HintPath></Reference>
     <None Include="$(ParisRoot)/Paris/bin/Debug/net8.0-windows7.0/Languages/**" Link="Languages/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
